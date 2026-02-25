@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Redis from 'ioredis';
-import { RedisProposalStorage } from './redisStorage';
-import { Proposal, ProposalState } from './multisig';
+import type { Redis } from 'ioredis';
+import { RedisProposalStorage } from './redisStorage.js';
+import { Proposal, ProposalState } from './multisig.js';
 
 describe('RedisProposalStorage', () => {
   let storage: RedisProposalStorage;

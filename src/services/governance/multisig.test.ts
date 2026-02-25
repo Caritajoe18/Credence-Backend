@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MultiSigCoordinationService, ProposalState } from './multisig';
-import { InMemoryProposalStorage } from './inMemoryStorage';
+import { MultiSigCoordinationService, ProposalState } from './multisig.js';
+import { InMemoryProposalStorage } from './inMemoryStorage.js';
 
 describe('MultiSigCoordinationService (Async)', () => {
   let service: MultiSigCoordinationService;

@@ -64,7 +64,7 @@ export function createRedisProbe(options: RedisProbeOptions = {}): HealthProbe |
   const url = process.env.REDIS_URL
   if (!url && !options.ping) return undefined
 
-  let client: import('ioredis').default | null = null
+  let client: any = null
 
   return async () => {
     try {
@@ -73,8 +73,9 @@ export function createRedisProbe(options: RedisProbeOptions = {}): HealthProbe |
         return { status: 'up' }
       }
       if (!client) {
-        const Redis = (await import('ioredis')).default
-        client = new Redis(url!, { maxRetriesPerRequest: 1 })
+        const mod = await import('ioredis')
+        const RedisConstructor = (mod.default || (mod as any).Redis) as any
+        client = new RedisConstructor(url!, { maxRetriesPerRequest: 1 })
       }
       await withTimeout(client.ping(), CHECK_TIMEOUT_MS)
       return { status: 'up' }

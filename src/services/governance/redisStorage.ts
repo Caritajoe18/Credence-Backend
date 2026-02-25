@@ -1,5 +1,5 @@
-import Redis from 'ioredis';
-import { IProposalStorage, Proposal, ProposalState } from './multisig';
+import type { Redis } from 'ioredis';
+import { IProposalStorage, Proposal, ProposalState } from './multisig.js';
 
 // We need a serialized version of Proposal because Maps and Sets don't
 // JSON serialize automatically.

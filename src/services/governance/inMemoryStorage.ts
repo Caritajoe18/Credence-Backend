@@ -1,4 +1,4 @@
-import { IProposalStorage, Proposal } from './multisig';
+import { IProposalStorage, Proposal } from './multisig.js';
 
 /**
  * An in-memory implementation of IProposalStorage suitable for testing.
