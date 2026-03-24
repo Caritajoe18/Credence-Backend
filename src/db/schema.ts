@@ -52,11 +52,11 @@ const CREATE_TABLE_STATEMENTS = [
     computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )
   `,
-  `CREATE INDEX IF NOT EXISTS bonds_identity_address_idx ON bonds (identity_address)`,
-  `CREATE INDEX IF NOT EXISTS attestations_subject_address_idx ON attestations (subject_address)`,
-  `CREATE INDEX IF NOT EXISTS attestations_bond_id_idx ON attestations (bond_id)`,
-  `CREATE INDEX IF NOT EXISTS slash_events_bond_id_idx ON slash_events (bond_id)`,
-  `CREATE INDEX IF NOT EXISTS score_history_identity_address_idx ON score_history (identity_address)`,
+  `CREATE INDEX IF NOT EXISTS bonds_identity_start_time_idx ON bonds (identity_address, start_time DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS attestations_subject_created_idx ON attestations (subject_address, created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS attestations_bond_created_idx ON attestations (bond_id, created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS slash_events_bond_created_idx ON slash_events (bond_id, created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS score_history_identity_computed_idx ON score_history (identity_address, computed_at DESC, id DESC)`,
 ] as const
 
 const DROP_TABLE_STATEMENTS = [
