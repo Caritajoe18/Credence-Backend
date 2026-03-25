@@ -31,9 +31,12 @@ import { subscribeBondCreationEvents } from '../listeners/horizonBondEvents.js'
 import { upsertBond, upsertIdentity } from '../services/identityService.js'
 
 describe('Horizon Bond Creation Listener', () => {
+  const events: any[] = []
+
   beforeEach(() => {
     vi.clearAllMocks()
     streamState.onmessage = undefined
+    events.length = 0
   })
 
   it('subscribes without throwing', () => {
@@ -75,6 +78,24 @@ describe('Horizon Bond Creation Listener', () => {
     expect(upsertIdentity).not.toHaveBeenCalled()
     expect(upsertBond).not.toHaveBeenCalled()
     expect(onEvent).not.toHaveBeenCalled()
+  })
+
+  it('handles duplicate bond events gracefully', async () => {
+    const op = {
+      type: 'create_bond',
+      source_account: 'GABC123',
+      id: 'bond123',
+      amount: '1000',
+      duration: '365',
+      paging_token: 'token-3',
+    }
+
+    subscribeBondCreationEvents((event) => events.push(event))
+    await streamState.onmessage?.(op)
+    await streamState.onmessage?.(op)
+
+    expect(upsertBond).toHaveBeenCalledTimes(2)
+    expect(events.length).toBe(2)
   })
 
   it('supports undefined callback', () => {
