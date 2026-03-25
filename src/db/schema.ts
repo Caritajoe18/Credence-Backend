@@ -68,6 +68,7 @@ const CREATE_TABLE_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS attestations_bond_id_idx ON attestations (bond_id)`,
   `CREATE INDEX IF NOT EXISTS slash_events_bond_id_idx ON slash_events (bond_id)`,
   `CREATE INDEX IF NOT EXISTS score_history_identity_address_idx ON score_history (identity_address)`,
+  `CREATE INDEX IF NOT EXISTS settlements_bond_settled_idx ON settlements (bond_id, settled_at DESC, id DESC)`,
 ] as const
 
 const DROP_TABLE_STATEMENTS = [
