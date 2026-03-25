@@ -133,15 +133,19 @@ All configuration is driven by environment variables. Copy `.env.example` to `.e
 
 ## Scripts
 
-| Command                  | Description                    |
-|--------------------------|--------------------------------|
-| `npm run dev`            | Start with tsx watch           |
-| `npm run build`          | Compile TypeScript             |
-| `npm start`              | Run compiled `dist/`           |
-| `npm run lint`           | Run ESLint                     |
-| `npm test`               | Run test suite (vitest)        |
-| `npm run test:watch`     | Run tests in watch mode        |
-| `npm run test:coverage`  | Run tests with coverage        |
+| Command                   | Description                              |
+|---------------------------|------------------------------------------|
+| `npm run dev`             | Start with tsx watch                     |
+| `npm run build`           | Compile TypeScript                       |
+| `npm start`               | Run compiled `dist/`                     |
+| `npm run lint`            | Run ESLint                               |
+| `npm test`                | Run test suite (vitest)                  |
+| `npm run test:watch`      | Run tests in watch mode                  |
+| `npm run test:coverage`   | Run tests with coverage                  |
+| `npm run migrate:create`  | Create new migration in `src/migrations/`|
+| `npm run migrate:dev`     | Build and run pending migrations (local) |
+| `npm run migrate`         | Run pending migrations (CI/production)   |
+| `npm run migrate:down`    | Rollback last migration                  |
 
 ## API (current)
 
@@ -154,6 +158,7 @@ All configuration is driven by environment variables. Copy `.env.example` to `.e
 | GET    | `/api/attestations/:address`  | List attestations for address      |
 | POST   | `/api/attestations`           | Create attestation                 |
 | GET    | `/api/verification/:address`  | Verification proof (stub)          |
+| GET    | `/api/analytics/summary`      | Aggregated analytics from materialized view |
 
 Invalid input returns **400** with `{ "error": "Validation failed", "details": [{ "path", "message" }] }`. See [docs/VALIDATION.md](docs/VALIDATION.md).
 
@@ -225,6 +230,7 @@ You supply:
 State shape is `IdentityState`: `address`, `bondedAmount`, `bondStart`, `bondDuration`, `active`. See `src/listeners/types.ts`.
 
 Tests cover: no drift (no update), single drift (one address corrected), full resync (multiple drifts), chain missing, store-only addresses, and error handling.
+
 
 ## Monitoring
 
@@ -331,25 +337,161 @@ try {
 | `ENABLE_BOND_EVENTS`   | No         | `false`        | Enable bond event processing             |
 | `HORIZON_URL`          | No         | —              | Stellar Horizon API URL                  |
 | `CORS_ORIGIN`          | No         | `*`            | Allowed CORS origin                      |
+| `ANALYTICS_REFRESH_CRON` | No       | `*/5 * * * *`  | Refresh cadence for analytics materialized view |
+| `ANALYTICS_STALENESS_SECONDS` | No | `300`          | Max acceptable analytics staleness before marked stale |
+
+## Analytics materialized views
+
+Analytics endpoints are backed by PostgreSQL materialized views to reduce response latency on aggregate queries.
+
+- **View source:** `analytics_metrics_mv`
+- **Refresh mode:** `REFRESH MATERIALIZED VIEW CONCURRENTLY`
+- **Default cadence:** every 5 minutes (`ANALYTICS_REFRESH_CRON`)
+- **Freshness window:** 300 seconds (`ANALYTICS_STALENESS_SECONDS`)
+
+The endpoint response includes staleness metadata:
+
+- `asOf`: timestamp of snapshot used in the response
+- `ageSeconds`: age of snapshot when served
+- `fresh`: whether snapshot age is within tolerated window
+- `refreshStatus`: `ok`, `stale`, or `failed_recently`
+
+When a refresh fails, the API keeps serving the last successful snapshot and marks the response with degraded freshness metadata.
+
+## Database Migrations
+
+The project uses [node-pg-migrate](https://salsita.github.io/node-pg-migrate/) for PostgreSQL database migrations with versioning and rollback support.
+
+### Prerequisites
+
+- PostgreSQL database
+- `DATABASE_URL` environment variable set (e.g., `postgres://user:password@localhost:5432/credence`)
+
+### Quick Start
+
+**Development (recommended):**
+```bash
+# Build TypeScript and run all pending migrations
+npm run migrate:dev
+```
+
+**Production/CI:**
+```bash
+# Requires dist/ to be built first
+npm run build
+npm run migrate
+```
+
+### Creating Migrations
+
+Create a new TypeScript migration file:
+
+```bash
+npm run migrate:create my_migration_name
+```
+
+This creates a timestamped `.ts` file in `src/migrations/`.
+
+### Migration Workflow
+
+**Development:**
+```bash
+# Build and run all pending migrations
+npm run migrate:dev
+
+# Check which migrations would run (dry run)
+npm run migrate:dev -- --dry-run
+```
+
+**Production/CI (requires build first):**
+```bash
+npm run build
+npm run migrate
+npm run migrate:down
+```
+
+**Rollback:**
+```bash
+# Development (builds first)
+npm run migrate:dev -- migrate:down
+
+# Production (requires dist/ built)
+npm run migrate:down
+```
+
+### Migration File Structure
+
+```typescript
+import { MigrationBuilder } from 'node-pg-migrate'
+
+export async function up(pgm: MigrationBuilder): Promise<void> {
+  // Apply changes (create tables, add columns, etc.)
+  pgm.createTable('users', {
+    id: 'id',
+    email: { type: 'varchar(255)', notNull: true },
+  })
+}
+
+export async function down(pgm: MigrationBuilder): Promise<void> {
+  // Reverse changes
+  pgm.dropTable('users')
+}
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | Required |
+| `MIGRATIONS_TABLE` | Table name for tracking migrations | `pgmigrations` |
+| `MIGRATIONS_SCHEMA` | Schema for migrations table | `public` |
+
+### CI/CD Integration
+
+Run migrations in CI/CD pipelines (requires build first):
+
+```bash
+# Dockerfile or CI script
+npm ci
+npm run build
+DATABASE_URL=postgres://... npm run migrate
+npm start
+```
+
+### Initial Schema
+
+The first migration (`src/migrations/001_initial_schema.ts`) creates:
+- `identities` - Identity and bond state
+- `attestations` - Attestation records
+- `reputation_scores` - Cached reputation scores
+
+After running `npm run build`, migrations are executed from `dist/migrations/`.
+
+### Best Practices
+
+1. **Always test both `up()` and `down()`** before committing
+2. **Keep migrations idempotent** - safe to run multiple times
+3. **Use transactions** - enabled by default for atomicity
+4. **Don't modify existing migrations** after they've been applied
+5. **Create new migrations** for schema changes
+6. **Back up production database** before running migrations
+
 
 ## Tech
 
 - Node.js
 - TypeScript
 - Express
+- PostgreSQL (with migrations via node-pg-migrate)
 - Prometheus (metrics)
 - Grafana (visualization)
 - Redis (caching layer)
 - @stellar/stellar-sdk (Stellar blockchain integration)
 - Vitest (testing)
-
-Extend with PostgreSQL and additional Horizon event ingestion when implementing the full architecture.
-- Vitest (testing)
 - Zod (env validation)
-- Zod (request validation + env validation)
-- Redis / ioredis (caching layer)
 - dotenv (.env file support)
-- Vitest + Supertest (testing)
+
+Extend with additional Horizon event ingestion when implementing the full architecture.
 
 ## Stellar/Soroban Integration
 

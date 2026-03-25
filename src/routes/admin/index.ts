@@ -1,5 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { AuthenticatedRequest, requireUserAuth, requireAdminRole, UserRole } from '../../middleware/auth.js'
+import {
+  buildPaginationMeta,
+  PaginationValidationError,
+  parsePaginationParams,
+} from '../../lib/pagination.js'
 import { AdminService } from '../../services/admin/index.js'
 import { auditLogService } from '../../services/audit/index.js'
 import { impersonationService } from '../../services/impersonation/index.js'
@@ -40,11 +45,25 @@ export function createAdminRouter(): Router {
       const authReq = req as AuthenticatedRequest
       const user = authReq.user!
 
-      // Parse pagination parameters
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100)
-      const offset = parseInt(req.query.offset as string) || 0
+      let pagination
+      try {
+        pagination = parsePaginationParams(req.query as Record<string, unknown>, { defaultLimit: 50 })
+      } catch (error) {
+        if (error instanceof PaginationValidationError) {
+          res.status(400).json({
+            error: 'InvalidRequest',
+            message: 'Invalid pagination parameters',
+            details: error.details,
+          })
+          return
+        }
 
-      if (limit < 1 || offset < 0) {
+        throw error
+      }
+
+      const { page, limit, offset } = pagination
+
+      if (page < 1 || limit < 1 || offset < 0) {
         res.status(400).json({
           error: 'InvalidRequest',
           message: 'Invalid pagination parameters',
@@ -70,11 +89,14 @@ export function createAdminRouter(): Router {
       }
 
       // Get users
-      const result = adminService.listUsers(user.id, user.email, { limit, offset }, filters)
+      const result = adminService.listUsers(user.id, user.email, { page, limit, offset }, filters)
 
       res.status(200).json({
         success: true,
-        data: result,
+        data: {
+          ...result,
+          ...buildPaginationMeta(result.total, page, limit),
+        },
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -216,11 +238,25 @@ export function createAdminRouter(): Router {
       const authReq = req as AuthenticatedRequest
       const user = authReq.user!
 
-      // Parse pagination
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100)
-      const offset = parseInt(req.query.offset as string) || 0
+      let pagination
+      try {
+        pagination = parsePaginationParams(req.query as Record<string, unknown>, { defaultLimit: 50 })
+      } catch (error) {
+        if (error instanceof PaginationValidationError) {
+          res.status(400).json({
+            error: 'InvalidRequest',
+            message: 'Invalid pagination parameters',
+            details: error.details,
+          })
+          return
+        }
 
-      if (limit < 1 || offset < 0) {
+        throw error
+      }
+
+      const { page, limit, offset } = pagination
+
+      if (page < 1 || limit < 1 || offset < 0) {
         res.status(400).json({
           error: 'InvalidRequest',
           message: 'Invalid pagination parameters',
@@ -239,7 +275,10 @@ export function createAdminRouter(): Router {
 
       res.status(200).json({
         success: true,
-        data: result,
+        data: {
+          ...result,
+          ...buildPaginationMeta(result.total, page, limit),
+        },
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -251,78 +290,90 @@ export function createAdminRouter(): Router {
   })
 
   /**
-   * POST /api/admin/impersonate
-   *
-   * Issue a short-lived impersonation token for a target user.
-   *
+   * GET /api/admin/audit-logs/export
+   * 
+   * Export audit logs as NDJSON stream
+   * 
+   * Query parameters:
+   * - startDate: ISO date string for start of range
+   * - endDate: ISO date string for end of range
+   * 
    * @requires Admin role
-   *
-   * @body {string} targetUserId - ID of the user to impersonate
-   * @body {string} reason       - Mandatory justification (logged to audit trail)
-   * @body {number} [ttlSeconds] - Token lifetime in seconds (default 900, max 3600)
-   *
-   * @returns {object} tokenId, targetUserId, targetUserEmail, expiresAt, ttlSeconds
    */
-  router.post('/impersonate', requireUserAuth, requireAdminRole, (req: Request, res: Response) => {
+  router.get('/audit-logs/export', requireUserAuth, requireAdminRole, async (req: Request, res: Response) => {
     try {
       const authReq = req as AuthenticatedRequest
-      const admin = authReq.user!
+      const user = authReq.user!
 
-      // Prevent nested impersonation: if the caller is already acting under an
-      // impersonation token, block the request.
-      if ((req as any).impersonationTokenId) {
-        res.status(403).json({
-          error: 'Forbidden',
-          message: 'Nested impersonation is not allowed',
-        })
-        return
-      }
-
-      const body = req.body as IssueImpersonationTokenRequest
-
-      if (!body.targetUserId || !body.reason) {
+      if (!req.query.startDate || !req.query.endDate) {
         res.status(400).json({
           error: 'InvalidRequest',
-          message: 'Missing required fields: targetUserId, reason',
+          message: 'Missing required query parameters: startDate, endDate',
         })
         return
       }
 
-      const result = impersonationService.issueToken(
-        admin.id,
-        admin.email,
-        body,
-        req.ip,
-      )
+      const startDate = new Date(req.query.startDate as string)
+      const endDate = new Date(req.query.endDate as string)
 
-      res.status(201).json({ success: true, data: result })
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        res.status(400).json({
+          error: 'InvalidRequest',
+          message: 'Invalid date format. Use ISO strings.',
+        })
+        return
+      }
+      
+      if (startDate > endDate) {
+        res.status(400).json({
+          error: 'InvalidRequest',
+          message: 'startDate must be before or equal to endDate',
+        })
+        return
+      }
+
+      const stream = adminService.exportAuditLogs(user.id, user.email, startDate, endDate)
+
+      // Set headers for NDJSON streaming
+      res.setHeader('Content-Type', 'application/x-ndjson')
+      res.setHeader('Content-Disposition', 'attachment; filename="audit-logs.ndjson"')
+      
+      // Write metadata header
+      const metadata = {
+        _meta: {
+          exportedAt: new Date().toISOString(),
+          exportedBy: user.email,
+          dateRange: {
+            start: startDate.toISOString(),
+            end: endDate.toISOString()
+          },
+          schemaVersion: "1.0"
+        }
+      }
+      res.write(JSON.stringify(metadata) + '\n')
+
+      // Iterate over async generator and stream results
+      let count = 0
+      for await (const log of stream) {
+        res.write(JSON.stringify(log) + '\n')
+        count++
+      }
+
+      // Log completion
+      adminService.logExportCompletion(user.id, user.email, startDate, endDate, count)
+
+      res.end()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      const status = message.includes('not found') ? 404 : 400
-      res.status(status).json({ error: 'BadRequest', message })
-    }
-  })
-
-  /**
-   * POST /api/admin/impersonate/:tokenId/revoke
-   *
-   * Revoke an active impersonation token before it expires.
-   *
-   * @requires Admin role
-   */
-  router.post('/impersonate/:tokenId/revoke', requireUserAuth, requireAdminRole, (req: Request, res: Response) => {
-    try {
-      const authReq = req as AuthenticatedRequest
-      const admin = authReq.user!
-      const { tokenId } = req.params
-
-      impersonationService.revokeToken(admin.id, admin.email, tokenId, req.ip)
-
-      res.status(200).json({ success: true, message: `Token ${tokenId} revoked` })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      const status = message.includes('not found') ? 404 : 400
-      res.status(status).json({ error: 'BadRequest', message })
+      if (!res.headersSent) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        res.status(500).json({
+          error: 'InternalError',
+          message,
+        })
+      } else {
+        // Stream already started, close it forcefully
+        res.end()
+      }
     }
   })
 
