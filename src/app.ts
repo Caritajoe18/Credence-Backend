@@ -20,6 +20,7 @@ import {
 } from './schemas/index.js'
 import { compressionMiddleware, compressionMetricsMiddleware } from './middleware/compression.js'
 import { metricsMiddleware, register } from './middleware/metrics.js'
+import { errorHandler } from './middleware/errorHandler.js'
 
 const app = express()
 
@@ -109,5 +110,8 @@ const analyticsService = process.env.DATABASE_URL
   ? new AnalyticsService(pool, analyticsThresholdSeconds)
   : undefined
 app.use('/api/analytics', createAnalyticsRouter(analyticsService))
+
+// Error handler must be last
+app.use(errorHandler)
 
 export default app

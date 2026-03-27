@@ -31,17 +31,34 @@ export const envSchema = z.object({
   ENABLE_TRUST_SCORING: z
     .string()
     .default('false')
-    .transform((val) => val === 'true'),
+    .transform((val: string) => val === 'true'),
   ENABLE_BOND_EVENTS: z
     .string()
     .default('false')
-    .transform((val) => val === 'true'),
+    .transform((val: string) => val === 'true'),
 
   // Horizon (optional)
   HORIZON_URL: z.string().url().optional(),
 
   // CORS
   CORS_ORIGIN: z.string().default('*'),
+
+  // Database Lock Timeouts (milliseconds)
+  DB_LOCK_TIMEOUT_DEFAULT: z
+    .string()
+    .default('5000')
+    .transform(Number)
+    .pipe(z.number().int().min(0)),
+  DB_LOCK_TIMEOUT_CRITICAL: z
+    .string()
+    .default('10000')
+    .transform(Number)
+    .pipe(z.number().int().min(0)),
+  DB_LOCK_TIMEOUT_READONLY: z
+    .string()
+    .default('2000')
+    .transform(Number)
+    .pipe(z.number().int().min(0)),
 })
 
 export type Env = z.infer<typeof envSchema>
@@ -70,6 +87,11 @@ export interface Config {
   cors: {
     origin: string
   }
+  lockTimeouts: {
+    default: number
+    critical: number
+    readonly: number
+  }
 }
 
 function mapEnvToConfig(env: Env): Config {
@@ -93,6 +115,11 @@ function mapEnvToConfig(env: Env): Config {
     },
     cors: {
       origin: env.CORS_ORIGIN,
+    },
+    lockTimeouts: {
+      default: env.DB_LOCK_TIMEOUT_DEFAULT,
+      critical: env.DB_LOCK_TIMEOUT_CRITICAL,
+      readonly: env.DB_LOCK_TIMEOUT_READONLY,
     },
   }
 
