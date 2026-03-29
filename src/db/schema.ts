@@ -76,7 +76,8 @@ const CREATE_TABLE_STATEMENTS = [
     failure_reason TEXT,
     artifact_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT notification_send_attempts_key_unique UNIQUE (idempotency_key)
   )
   `,
   `
