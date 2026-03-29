@@ -247,7 +247,7 @@ export class HorizonWithdrawalListener {
       assetCode: payment.asset_code,
       assetIssuer: payment.asset_issuer,
       transactionHash: operation.transaction_hash || '',
-      operationIndex: operation.id in operation ? parseInt(operation.id.split('-').pop() || '0') : 0
+      operationIndex: Number.parseInt(operation.id.split('-').pop() ?? '0', 10) || 0
     }
   }
 

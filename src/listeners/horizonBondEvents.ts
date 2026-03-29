@@ -43,9 +43,7 @@ export function subscribeBondCreationEvents(onEvent?: (event: { identity: { id: 
   };
   startStream();
 
-  // Backfill logic: fetch missed events if needed
-  // Example: fetch operations since last cursor
-  // (Implement as needed based on DB state)
+  startStream()
 }
 
 /**
@@ -56,15 +54,11 @@ export function subscribeBondCreationEvents(onEvent?: (event: { identity: { id: 
 function parseBondEvent(op: { source_account: string; id: string; amount: string; duration?: string | null }) {
   // Example parsing logic
   return {
-    identity: {
-      id: op.source_account,
-      // ...other fields
-    },
+    identity: { id: op.source_account },
     bond: {
       id: op.id,
       amount: op.amount,
-      duration: op.duration || null,
-      // ...other fields
-    }
-  };
+      duration: op.duration ?? null,
+    },
+  }
 }

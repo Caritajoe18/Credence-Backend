@@ -8,7 +8,7 @@
  *    endpoints use this so unauthenticated requests still pass through.
  *
  * 2. `requireApiKey` – Enforcing. Validates `Authorization: Bearer <key>` or
- *    `X-API-Key: <key>`, attaches the validated key record to `req.apiKey`,
+ *    `X-API-Key: <key>`, attaches the validated key record to `req.apiKeyRecord`,
  *    and returns 401/403 if the key is missing, revoked, or lacks scope.
  */
 
@@ -22,7 +22,7 @@ export type RateTier = 'standard' | 'premium'
 // Augment Express Request to carry the validated key record (set by requireApiKey)
 declare module 'express-serve-static-core' {
   interface Request {
-    apiKey?: StoredApiKey
+    apiKeyRecord?: StoredApiKey
   }
 }
 
@@ -98,7 +98,7 @@ export function requireApiKey(requiredScope?: KeyScope) {
       throw new ForbiddenError('Insufficient scope: full access required')
     }
 
-    req.apiKey = apiKey
+    req.apiKeyRecord = apiKey
     next()
   }
 }
