@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import request from 'supertest'
 import express from 'express'
-import reportRouter from './report.js'
 import { ApiScope, UserRole } from '../middleware/auth.js'
 import { ReportJobStatus } from '../jobs/types.js'
 
@@ -34,16 +33,15 @@ vi.mock('../services/reportService.js', () => ({
   }),
 }))
 
-// Import mocked services to set their behaviors
-import { ReportService } from '../services/reportService.js'
+import reportRouter from './report.js'
 
 describe('Report Routes', () => {
   let app: express.Express
-  let mockReportService: any
   const ENTERPRISE_KEY = 'test-enterprise-key-12345'
   const PUBLIC_KEY = 'test-public-key-67890'
 
   beforeEach(() => {
+    vi.clearAllMocks()
     app = express()
     app.use(express.json())
     app.use('/api/reports', reportRouter)
@@ -75,7 +73,7 @@ describe('Report Routes', () => {
         type: 'summary',
         createdAt: new Date().toISOString(),
       }
-      mockReportService.startReportGeneration.mockResolvedValue(mockJob)
+      mockServiceInstance.current.startReportGeneration.mockResolvedValue(mockJob)
 
       const response = await request(app)
         .post('/api/reports')
@@ -118,7 +116,7 @@ describe('Report Routes', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      mockReportService.getReportStatus.mockResolvedValue(mockJob)
+      mockServiceInstance.current.getReportStatus.mockResolvedValue(mockJob)
 
       const response = await request(app)
         .get('/api/reports/job-123')
@@ -136,7 +134,7 @@ describe('Report Routes', () => {
     })
 
     it('should return 404 when job not found', async () => {
-      mockReportService.getReportStatus.mockResolvedValue(null)
+      mockServiceInstance.current.getReportStatus.mockResolvedValue(null)
 
       const response = await request(app)
         .get('/api/reports/non-existent')

@@ -22,6 +22,11 @@
     "migrate:safety": "tsx src/migrations/linter.ts check --strict"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/sdk-trace-base": "^1.26.0",
+    "@opentelemetry/sdk-trace-node": "^1.26.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0",
     "@stellar/stellar-sdk": "^14.5.0",
     "asynckit": "^0.5.0",
     "better-sqlite3": "^12.6.2",
